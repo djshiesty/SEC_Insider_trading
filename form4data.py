@@ -1,10 +1,10 @@
 import pandas as pd
-
+import numpy as np
 from edgar import set_identity, Company
 from datetime import datetime
-from spy_tracker import get_cached_data, BENCHMARK
+from SPY_tracker import get_cached_data, BENCHMARK
 
-set_identity("Your Name your.email@example.com")
+set_identity("Atharva soni20283106@student.nhvweb.net")
 def analyze(ticker):
     
     company = Company(ticker)
@@ -16,7 +16,6 @@ def analyze(ticker):
             df = filing.obj().to_dataframe()
             if not df.empty:
                 frames.append(df)
-        
         except Exception as e:
             print(f"Skipped {filing.accession_no}: {e}")
     
@@ -29,33 +28,40 @@ def caller():
             break
         try:
             df = analyze(ticker)
-            print(df.columns)
-            print(df.head() if not df.empty else "No insider trades found.")
-        except Exception as e:
+            if df.empty:
+                print("No insider trades found.")
+                continue
+            buys = df[df["Code"] == "P"]
+            if buys.empty:
+                print("No open-market insider buys.")
+                continue
+            else:
+                buys = buys.copy()
+                buys["CAR"] = [cumulative_abnormal_return(ticker, pd.to_datetime(d)) for d in buys["Date"]]
+                print(buys[["Date", "Insider", "Value", "CAR"]])
+                print(f"Average CAR: {buys['CAR'].mean():.2%}")
+        except Exception:
             print(f"Could not find ticker: {ticker}. Try again.")
 
+def market_model(stock, SPY):
+    beta, alpha = np.polyfit(SPY,stock,1)
+    return alpha, beta
 
-def excess_returns(ticker, buys, days=21):
-    """Stock return minus SPY return over ~30 days (21 trading days) after each insider buy."""
-    dates = pd.to_datetime(buys["Date"])
-    daysbf = (datetime.now() - dates.min()).days + 5
-    stock = get_cached_data(ticker, daysbf)["Close"]
-    spy = get_cached_data(BENCHMARK, daysbf)["Close"]
+def cumulative_abnormal_return(ticker, buydate):
+    daysbf = (datetime.now() - buydate).days + 200
+    riskfree = get_cached_data("^IRX", daysbf)["Close"] / 100 / 252
+    data = pd.DataFrame({
+        "stock": get_cached_data(ticker, daysbf)["Close"].pct_change() - riskfree,
+        "spy": get_cached_data(BENCHMARK, daysbf)["Close"].pct_change() - riskfree,
+    }).dropna()
 
-    results = []
-    for date in dates:
-        s = stock[stock.index >= date].iloc[:days + 1]
-        b = spy[spy.index >= date].iloc[:days + 1]
-        if len(s) < days + 1:  # not 30 days since the buy yet
-            results.append(None)
-        else:
-            results.append((s.iloc[-1] / s.iloc[0] - 1) - (b.iloc[-1] / b.iloc[0] - 1))
-    buys = buys.copy()
-    buys["Excess Return"] = results
-    return buys
+    before = data[data.index < buydate].tail(120)
+    after = data[data.index >= buydate].head(21)
+    if len(before) < 120 or len(after) < 21:
+        return None
 
-def market_model():
-    pass
+    alpha, beta = market_model(before["stock"], before["spy"])
+    return (after["stock"] - alpha - beta * after["spy"]).sum()
 
 if __name__ == "__main__":
     caller()
