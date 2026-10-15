@@ -3,6 +3,7 @@ import numpy as np
 from edgar import set_identity, Company
 from datetime import datetime
 from SPY_tracker import get_cached_data, BENCHMARK
+import plotly.express as px
 
 set_identity("Atharva soni20283106@student.nhvweb.net")
 def analyze(ticker):
@@ -40,15 +41,19 @@ def caller():
                 buys["CAR"] = [cumulative_abnormal_return(ticker, pd.to_datetime(d)) for d in buys["Date"]]
                 print(buys[["Date", "Insider", "Value", "CAR"]])
                 print(f"Average CAR: {buys['CAR'].mean():.2%}")
+                fig = px.bar(buys, x="Date", y="CAR", hover_data=["Insider", "Value"],
+                         title=f"{ticker}: 30-day abnormal return after insider buys")
+                fig.show()
         except Exception:
             print(f"Could not find ticker: {ticker}. Try again.")
+    
 
 def market_model(stock, SPY):
     beta, alpha = np.polyfit(SPY,stock,1)
     return alpha, beta
 
 def cumulative_abnormal_return(ticker, buydate):
-    daysbf = (datetime.now() - buydate).days + 200
+    daysbf = 730
     riskfree = get_cached_data("^IRX", daysbf)["Close"] / 100 / 252
     data = pd.DataFrame({
         "stock": get_cached_data(ticker, daysbf)["Close"].pct_change() - riskfree,
