@@ -1,5 +1,3 @@
-SEC_Insider_trading
- 
 # SEC Insider Trading Tracker
  
 **Summary:** Through SEC EDGAR Form 4 filings for publicly traded companies, the project parses data from all the trades or changes in beneficial ownership of a certain company's executives ownership in a company, scanning through for potential possibilities of company insider trading. By running it with the S&P 500, we can find alpha through comparisons.
